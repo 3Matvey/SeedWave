@@ -7,9 +7,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Folder Include="Catalog\" />
-    <Folder Include="Generation\" />
-    <Folder Include="Regions\" />
     <Folder Include="AudioComposition\" />
     <Folder Include="Common\" />
   </ItemGroup>
