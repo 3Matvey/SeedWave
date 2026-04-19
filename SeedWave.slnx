@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="SeedWave.Api/SeedWave.Api.csproj" />
+  <Project Path="SeedWave.Core/SeedWave.Core.csproj" />
+  <Project Path="SeedWave.Infrastructure/SeedWave.Infrastructure.csproj" />
+</Solution>
