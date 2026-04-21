@@ -1,0 +1,26 @@
+{
+  "region": "en-US",
+  "artists": {
+    "firstNames": [ "Luna", "Mila", "Noah", "Leo", "Ivy", "Aria", "Ethan", "Nora" ],
+    "lastNames": [ "Stone", "Vale", "Cross", "Skye", "Reed", "Hart", "Blake", "Rowe" ],
+    "bandPrefixes": [ "Velvet", "Silver", "Static", "Crystal", "Neon", "Golden", "Midnight", "Electric" ],
+    "bandNouns": [ "Echo", "Lines", "Hearts", "Motion", "Shadows", "Signals", "Dreams", "Parade" ]
+  },
+  "songs": {
+    "adjectives": [ "Silent", "Golden", "Broken", "Midnight", "Neon", "Fading", "Electric", "Endless" ],
+    "nouns": [ "Signal", "Dream", "City", "Echo", "Heart", "Horizon", "Light", "Memory" ]
+  },
+  "albums": {
+    "adjectives": [ "Endless", "Electric", "Blue", "Hidden", "Fading", "Silver", "Burning", "Velvet" ],
+    "nouns": [ "Lights", "Parade", "Horizons", "Memories", "Currents", "Dreams", "Signals", "Skies" ],
+    "singleLiteral": "Single"
+  },
+  "genres": [
+    "Synthpop",
+    "Dream Pop",
+    "Indie Electronic",
+    "Lo-Fi Pop",
+    "Ambient Pop",
+    "Alternative Rock"
+  ]
+}
