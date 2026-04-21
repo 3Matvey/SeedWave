@@ -12,7 +12,9 @@ namespace SeedWave.Core.Catalog
         ArtistNameGenerator artistNameGenerator,
         AlbumTitleGenerator albumTitleGenerator,
         GenreGenerator genreGenerator,
-        LikesGenerator likesGenerator)
+        LikesGenerator likesGenerator,
+        ReviewTextGenerator reviewTextGenerator
+        )
     {
         public SongRecord Generate(SongIdentity identity, double likesAverage, LocaleProfile localeProfile)
         {
@@ -24,8 +26,16 @@ namespace SeedWave.Core.Catalog
             var album = GenerateAlbum(identity, localeProfile);
             var genre = GenerateGenre(identity, localeProfile);
             var likes = GenerateLikes(identity, likesAverage);
+            var reviewText = GenerateReview(identity, localeProfile);
 
-            return CreateSongRecord(identity, title, artist, album, genre, likes);
+            return CreateSongRecord(identity, title, artist, album, genre, likes, reviewText);
+        }
+
+        private string GenerateReview(SongIdentity identity, LocaleProfile localeProfile)
+        {
+            var seed = seedDeriver.Derive(identity, SeedPurpose.Review);
+
+            return reviewTextGenerator.Generate(localeProfile, seed);
         }
 
         private string GenerateTitle(SongIdentity identity, LocaleProfile localeProfile)
@@ -70,7 +80,8 @@ namespace SeedWave.Core.Catalog
             string artist,
             AlbumGenerationResult album,
             string genre,
-            int likes
+            int likes,
+            string reviewText
         )
         {
             var core = new SongCore
@@ -86,7 +97,8 @@ namespace SeedWave.Core.Catalog
             (
                 identity,
                 core,
-                likes
+                likes,
+                reviewText
             );
         }
     }

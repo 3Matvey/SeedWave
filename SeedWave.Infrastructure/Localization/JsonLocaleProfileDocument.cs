@@ -10,6 +10,8 @@
 
         public JsonAlbumLexiconDocument Albums { get; init; } = new();
 
+        public JsonReviewLexiconDocument Reviews { get; init; } = new();
+
         public List<string> Genres { get; init; } = [];
     }
 }

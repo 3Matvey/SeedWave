@@ -7,7 +7,8 @@
     (
         SongIdentity Identity,
         SongCore Core,
-        int Likes
+        int Likes,
+        string ReviewText
     );
-    //TODO review, cover profile и audio profile
+    //TODO cover profile и audio profile
 }

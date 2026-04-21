@@ -23,5 +23,7 @@ app.UseHttpsRedirection();
 
 app.MapGetCatalogEndpoint();
 app.MapGetRegionsEndpoint();
+app.MapGetSongDetailsEndpoint();
+app.MapGetSongPreviewEndpoint();
 
 app.Run();

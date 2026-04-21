@@ -6,6 +6,8 @@
         Artist = 2,
         Album = 3,
         Genre = 4,
-        Likes = 5
+        Likes = 5,
+        Review = 6,
+        Audio = 7
     }
 }

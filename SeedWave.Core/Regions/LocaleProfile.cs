@@ -9,6 +9,7 @@
         ArtistLexicon Artists,
         SongLexicon Songs,
         AlbumLexicon Albums,
+        ReviewLexicon Reviews,
         IReadOnlyList<string> Genres
     );
 }

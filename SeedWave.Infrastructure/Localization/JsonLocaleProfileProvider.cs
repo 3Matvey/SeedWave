@@ -78,7 +78,18 @@ namespace SeedWave.Infrastructure.Localization
                 MapArtists(document.Artists),
                 MapSongs(document.Songs),
                 MapAlbums(document.Albums),
+                MapReviews(document.Reviews),
                 document.Genres
+            );
+        }
+        private static ReviewLexicon MapReviews(JsonReviewLexiconDocument reviews)
+        {
+            return new ReviewLexicon
+            (
+                reviews.Openings,
+                reviews.MoodDescriptors,
+                reviews.ArrangementDescriptors,
+                reviews.Closings
             );
         }
 

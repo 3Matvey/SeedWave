@@ -8,7 +8,6 @@
 
   <ItemGroup>
     <Folder Include="CoverArt\" />
-    <Folder Include="Audio\" />
     <Folder Include="Caching\" />
     <Folder Include="IO\" />
     <Folder Include="DependencyInjection\" />
