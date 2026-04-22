@@ -1,4 +1,7 @@
-﻿using SeedWave.Core.Generation;
+﻿using SeedWave.Core.AudioComposition.Theory;
+using SeedWave.Core.Generation;
+using MusicNote = Melanchall.DryWetMidi.MusicTheory.Note;
+using MusicInterval = Melanchall.DryWetMidi.MusicTheory.Interval;
 
 namespace SeedWave.Core.AudioComposition
 {
@@ -11,91 +14,43 @@ namespace SeedWave.Core.AudioComposition
         Outro
     }
 
-    public enum MotifVariationType
+    public sealed class CompositionPlanBuilder
     {
-        Repeat,
-        TailVariation,
-        RhythmicVariation,
-        Simplify,
-        DirectionFlip
-    }
-
-    public enum BassPatternType
-    {
-        HoldRoot,
-        PulseRoot,
-        ApproachNextRoot
-    }
-
-    public enum DrumPatternType
-    {
-        Basic,
-        Sparse,
-        Driving
-    }
-
-    internal sealed record LeadRhythmPattern(bool[] Steps);
-
-    internal sealed record MotifStep(int DegreeOffset, bool IsRest = false);
-
-    internal sealed record LeadMotif(IReadOnlyList<MotifStep> Steps);
-
-    /// <summary>
-    /// Builds a deterministic generated arrangement with:
-    /// - section-based song structure;
-    /// - lead motifs with rhythmic variation;
-    /// - bass patterns with simple movement;
-    /// - multiple drum grooves and small fills.
-    /// </summary>
-    public class CompositionPlanBuilder
-    {
-        private const int SemitonesPerOctave = 12;
-        private const int MidiOctaveOffset = 1;
-
         private const int BeatsPerBar = 4;
-        private const int LeadStepsPerBar = 8;
-        private const int HiHatStepsPerBar = 8;
+        private const int EighthStepsPerBar = 8;
+        private const int SixteenthStepsPerBar = 16;
+        private const int LoopBars = 2;
 
-        private const double QuarterNoteDuration = 1.0;
-        private const double EighthNoteDuration = 0.5;
-        private const double HalfBarDuration = 2.0;
+        private const double EighthBeat = 0.5;
+        private const double SixteenthBeat = 0.25;
 
-        private const double DrumHitDuration = 0.20;
-        private const double HiHatHitDuration = 0.10;
-        private const double HiHatStepSize = 0.5;
+        private const double LeadDuration = 0.22;
+        private const double LeadAccentDuration = 0.34;
+        private const double ArpDuration = 0.18;
+        private const double BassDuration = 0.22;
+        private const double BassAccentDuration = 0.34;
 
-        private const double LeadBaseVelocity = 0.62;
-        private const double LeadVariationVelocity = 0.74;
-        private const double LeadVelocityRange = 0.10;
-
-        private const double BassHoldVelocity = 0.68;
-        private const double BassPulseVelocity = 0.60;
-        private const double BassApproachVelocity = 0.58;
-
-        private const double KickPrimaryVelocity = 0.95;
-        private const double KickSecondaryVelocity = 0.82;
-        private const double SnareVelocity = 0.76;
-        private const double FillSnareVelocity = 0.80;
-
-        private const double HiHatMinVelocity = 0.26;
-        private const double HiHatVelocityRange = 0.16;
+        private const double DrumHitDuration = 0.14;
+        private const double HiHatDuration = 0.06;
 
         private const int KickMidiNote = 36;
         private const int SnareMidiNote = 38;
         private const int ClosedHiHatMidiNote = 42;
         private const int OpenHiHatMidiNote = 46;
 
-        private static readonly int[] MinorScaleIntervals = [0, 2, 3, 5, 7, 8, 10];
-        private static readonly int[] MajorScaleIntervals = [0, 2, 4, 5, 7, 9, 11];
+        private const double LeadVelocity = 0.72;
+        private const double LeadAccentVelocity = 0.86;
+        private const double ArpVelocity = 0.42;
+        private const double ArpAccentVelocity = 0.54;
+        private const double BassVelocity = 0.80;
+        private const double BassAccentVelocity = 0.92;
+        private const double KickVelocity = 0.98;
+        private const double KickSecondaryVelocity = 0.88;
+        private const double SnareVelocity = 0.78;
+        private const double HiHatVelocity = 0.28;
+        private const double OpenHiHatVelocity = 0.46;
 
-        private static readonly LeadRhythmPattern[] LeadRhythmPatterns =
-        [
-            new([true, false, true, false, true, false, true, false]),
-            new([true, true, false, true, false, true, false, true]),
-            new([true, false, false, true, true, false, true, false]),
-            new([true, true, true, false, true, false, false, true]),
-            new([true, false, true, true, false, true, false, false])
-        ];
+        private readonly HarmonyPlanner _harmonyPlanner = new();
 
         public CompositionPlan Build(AudioProfile audioProfile, int seed)
         {
@@ -104,50 +59,69 @@ namespace SeedWave.Core.AudioComposition
             var random = new Random(seed);
             var notes = new List<NoteEvent>();
 
-            var scaleIntervals = GetScaleIntervals(audioProfile.Mode);
-            var leadRoot = GetMidiRoot(audioProfile.Key, audioProfile.LeadOctave);
-            var bassRoot = GetMidiRoot(audioProfile.Key, audioProfile.BassOctave);
-
+            var theory = new MusicTheoryContext(audioProfile);
+            var harmony = _harmonyPlanner.Build(audioProfile.Bars, theory, seed);
             var sections = BuildSectionPlan(audioProfile.Bars);
-            var bassRoots = BuildBassRoots(scaleIntervals, bassRoot, audioProfile.Bars, random);
 
-            var baseMotif = CreateBaseLeadMotif(random);
-            var previousMotif = baseMotif;
+            var leadLoop = BuildLeadLoop(random);
+            var arpLoop = BuildArpLoop(random);
+            var bassLoop = BuildBassLoop(random);
+            var drumLoop = BuildDrumLoop(random);
 
             for (var bar = 0; bar < audioProfile.Bars; bar++)
             {
                 var section = sections[bar];
-                var currentBassRoot = bassRoots[bar];
-                var nextBassRoot = bassRoots[Math.Min(bar + 1, bassRoots.Length - 1)];
+                var harmonicBar = harmony[bar];
+                var nextDegree = harmony[Math.Min(bar + 1, harmony.Count - 1)].Degree;
                 var barStartBeat = bar * BeatsPerBar;
+                var barInLoop = bar % LoopBars;
+                var isVariantBar = section == SectionType.Variation || ((bar + 1) % 4 == 0);
 
-                var motif = bar == 0
-                    ? baseMotif
-                    : CreateMotifForBar(previousMotif, section, random);
+                AddArpLayer(
+                    notes,
+                    theory,
+                    harmonicBar.Degree,
+                    audioProfile,
+                    section,
+                    arpLoop[barInLoop],
+                    barStartBeat,
+                    isVariantBar);
 
-                AddLeadNotes(notes, scaleIntervals, leadRoot, motif, section, barStartBeat, random);
-                AddBassNotes(notes, scaleIntervals, currentBassRoot, nextBassRoot, section, barStartBeat, random);
-                AddDrumNotes(notes, section, bar, barStartBeat, random);
+                AddBassLayer(
+                    notes,
+                    theory,
+                    harmonicBar.Degree,
+                    nextDegree,
+                    audioProfile,
+                    section,
+                    bassLoop[barInLoop],
+                    barStartBeat,
+                    random,
+                    isVariantBar);
 
-                previousMotif = motif;
+                AddLeadLayer(
+                    notes,
+                    theory,
+                    harmonicBar.Degree,
+                    audioProfile,
+                    section,
+                    leadLoop[barInLoop],
+                    barStartBeat,
+                    random,
+                    isVariantBar);
+
+                AddDrumLayer(
+                    notes,
+                    section,
+                    drumLoop[barInLoop],
+                    barStartBeat,
+                    addFill: (bar + 1) % 4 == 0 && section is not SectionType.Outro);
             }
 
             return new CompositionPlan(
                 audioProfile.TempoBpm,
                 audioProfile.Bars,
                 notes);
-        }
-
-        private static int[] GetScaleIntervals(ScaleMode mode)
-        {
-            return mode == ScaleMode.Minor
-                ? MinorScaleIntervals
-                : MajorScaleIntervals;
-        }
-
-        private static int GetMidiRoot(MusicalKey key, int octave)
-        {
-            return ((int)key) + (octave + MidiOctaveOffset) * SemitonesPerOctave;
         }
 
         private static SectionType[] BuildSectionPlan(int bars)
@@ -157,21 +131,6 @@ namespace SeedWave.Core.AudioComposition
             if (bars == 1)
             {
                 sections[0] = SectionType.Main;
-                return sections;
-            }
-
-            if (bars <= 4)
-            {
-                sections[0] = SectionType.Intro;
-
-                for (var i = 1; i < bars - 1; i++)
-                {
-                    sections[i] = i == bars - 2
-                        ? SectionType.Variation
-                        : SectionType.Main;
-                }
-
-                sections[^1] = SectionType.Outro;
                 return sections;
             }
 
@@ -191,396 +150,354 @@ namespace SeedWave.Core.AudioComposition
             return sections;
         }
 
-        private static int[] BuildBassRoots(
-            IReadOnlyList<int> scaleIntervals,
-            int tonicBassRoot,
-            int bars,
-            Random random)
+        private static int[][] BuildLeadLoop(Random random)
         {
-            var progressionDegrees = random.Next(3) switch
+            var patterns = new[]
             {
-                0 => new[] { 0, 4, 5, 3 },
-                1 => new[] { 0, 3, 4, 3 },
-                _ => new[] { 0, 5, 3, 4 }
+                new[] { 0, 2, 4, 2, 5, 4, 2, 1, 0, 2, 4, 5, 4, 2, 1, 0 },
+                new[] { 0, 0, 2, 4, 5, 4, 2, 0, 0, 2, 4, 2, 5, 4, 2, 1 },
+                new[] { 0, 2, 4, 5, 4, 2, 1, 0, 0, 2, 0, 4, 5, 4, 2, 0 },
+                new[] { 0, 2, 0, 4, 5, 4, 2, 0, 1, 2, 4, 2, 5, 4, 2, 0 }
             };
 
-            return
-            [
-                .. Enumerable.Range(0, bars)
-                    .Select(index =>
-                    {
-                        var degree = progressionDegrees[index % progressionDegrees.Length];
-                        return ScaleDegreeToMidi(tonicBassRoot, scaleIntervals, degree, 0);
-                    })
-            ];
+            var first = patterns[random.Next(patterns.Length)];
+            var second = MutateLeadPattern(first, random);
+
+            return [first, second];
         }
 
-        private static LeadMotif CreateBaseLeadMotif(Random random)
+        private static int[][] BuildArpLoop(Random random)
         {
-            var rhythm = LeadRhythmPatterns[random.Next(LeadRhythmPatterns.Length)];
-            var steps = new List<MotifStep>(LeadStepsPerBar);
-
-            var direction = random.Next(2) == 0 ? 1 : -1;
-            var currentOffset = 0;
-
-            for (var i = 0; i < LeadStepsPerBar; i++)
+            var patterns = new[]
             {
-                if (!rhythm.Steps[i])
+                new[] { 0, 1, 2, 3, 2, 1, 0, 1, 2, 3, 2, 1, 0, 1, 2, 3 },
+                new[] { 0, 2, 1, 3, 0, 2, 1, 3, 0, 2, 1, 3, 0, 2, 1, 3 },
+                new[] { 0, 1, 2, 1, 3, 2, 1, 0, 0, 1, 2, 1, 3, 2, 1, 0 },
+                new[] { 0, 1, 3, 2, 0, 1, 3, 2, 0, 1, 2, 3, 0, 1, 2, 3 }
+            };
+
+            var first = patterns[random.Next(patterns.Length)];
+            var second = MutateArpPattern(first, random);
+
+            return [first, second];
+        }
+
+        private static int[][] BuildBassLoop(Random random)
+        {
+            var patterns = new[]
+            {
+                new[] { 0, -1, 0, 0, 0, -1, 0, 1, 0, -1, 0, 0, 0, -1, 1, -1 },
+                new[] { 0, -1, 0, 2, 0, -1, 0, 1, 0, -1, 0, 2, 0, -1, 1, -1 },
+                new[] { 0, 0, -1, 0, 0, 2, -1, 1, 0, 0, -1, 0, 0, -1, 1, -1 },
+                new[] { 0, -1, 0, 0, 0, -1, 2, 1, 0, -1, 0, 0, 0, -1, 1, -1 }
+            };
+
+            var first = patterns[random.Next(patterns.Length)];
+            var second = MutateBassPattern(first, random);
+
+            return [first, second];
+        }
+
+        private static DrumBarPattern[] BuildDrumLoop(Random random)
+        {
+            var first = random.Next(100) < 50
+                ? DrumBarPattern.Basic()
+                : DrumBarPattern.Driving();
+
+            var second = random.Next(100) < 50
+                ? DrumBarPattern.BasicVariant()
+                : DrumBarPattern.DrivingVariant();
+
+            return [first, second];
+        }
+
+        private static int[] MutateLeadPattern(int[] source, Random random)
+        {
+            var clone = (int[])source.Clone();
+
+            for (var i = 0; i < 2; i++)
+            {
+                var index = random.Next(clone.Length);
+                clone[index] = Math.Clamp(clone[index] + (random.Next(100) < 50 ? -1 : 1), 0, 6);
+            }
+
+            return clone;
+        }
+
+        private static int[] MutateArpPattern(int[] source, Random random)
+        {
+            var clone = (int[])source.Clone();
+
+            for (var i = 0; i < 2; i++)
+            {
+                clone[random.Next(clone.Length)] = random.Next(4);
+            }
+
+            return clone;
+        }
+
+        private static int[] MutateBassPattern(int[] source, Random random)
+        {
+            var clone = (int[])source.Clone();
+
+            if (random.Next(100) < 70)
+            {
+                clone[7] = 1;
+            }
+
+            if (random.Next(100) < 50)
+            {
+                clone[11] = 2;
+            }
+
+            return clone;
+        }
+
+        private static void AddArpLayer(
+            List<NoteEvent> notes,
+            MusicTheoryContext theory,
+            int chordDegree,
+            AudioProfile profile,
+            SectionType section,
+            int[] arpPattern,
+            double barStartBeat,
+            bool isVariantBar)
+        {
+            var chord = theory.GetTriadNotes(
+                chordDegree,
+                Math.Max(profile.BassOctave + 2, profile.LeadOctave - 1));
+
+            var arpNotes = BuildArpNotes(chord);
+
+            for (var step = 0; step < SixteenthStepsPerBar; step++)
+            {
+                if (section == SectionType.Break && step < 4)
                 {
-                    steps.Add(new MotifStep(0, true));
                     continue;
                 }
 
-                var move = random.Next(100) switch
+                var note = arpNotes[arpPattern[step] % arpNotes.Count];
+                var velocity = step % 4 == 0
+                    ? ArpAccentVelocity
+                    : ArpVelocity;
+
+                if (section == SectionType.Intro)
                 {
-                    < 45 => 0,
-                    < 72 => direction,
-                    < 87 => direction * 2,
-                    _ => -direction
-                };
+                    velocity *= 0.90;
+                }
 
-                currentOffset = Math.Clamp(currentOffset + move, -1, 4);
-                steps.Add(new MotifStep(currentOffset));
-            }
-
-            return new LeadMotif(steps);
-        }
-
-        private static LeadMotif CreateMotifForBar(
-            LeadMotif previousMotif,
-            SectionType section,
-            Random random)
-        {
-            var variation = PickVariation(section, random);
-
-            return variation switch
-            {
-                MotifVariationType.Repeat => previousMotif,
-                MotifVariationType.TailVariation => ApplyTailVariation(previousMotif, random),
-                MotifVariationType.RhythmicVariation => ApplyRhythmicVariation(previousMotif, random),
-                MotifVariationType.Simplify => ApplySimplifyVariation(previousMotif),
-                MotifVariationType.DirectionFlip => ApplyDirectionFlip(previousMotif),
-                _ => previousMotif
-            };
-        }
-
-        private static MotifVariationType PickVariation(SectionType section, Random random)
-        {
-            return section switch
-            {
-                SectionType.Intro => MotifVariationType.Simplify,
-                SectionType.Main => random.Next(100) < 70
-                    ? MotifVariationType.Repeat
-                    : MotifVariationType.TailVariation,
-                SectionType.Variation => random.Next(2) == 0
-                    ? MotifVariationType.RhythmicVariation
-                    : MotifVariationType.DirectionFlip,
-                SectionType.Break => MotifVariationType.Simplify,
-                SectionType.Outro => MotifVariationType.Simplify,
-                _ => MotifVariationType.Repeat
-            };
-        }
-
-        private static LeadMotif ApplyTailVariation(LeadMotif motif, Random random)
-        {
-            var steps = motif.Steps
-                .Select(step => new MotifStep(step.DegreeOffset, step.IsRest))
-                .ToArray();
-
-            for (var i = Math.Max(steps.Length - 2, 0); i < steps.Length; i++)
-            {
-                if (steps[i].IsRest)
-                    continue;
-
-                var delta = random.Next(-1, 2);
-                steps[i] = steps[i] with
+                if (isVariantBar && step is 14 or 15)
                 {
-                    DegreeOffset = Math.Clamp(steps[i].DegreeOffset + delta, -1, 5)
-                };
-            }
-
-            return new LeadMotif(steps);
-        }
-
-        private static LeadMotif ApplyRhythmicVariation(LeadMotif motif, Random random)
-        {
-            var steps = motif.Steps
-                .Select(step => new MotifStep(step.DegreeOffset, step.IsRest))
-                .ToArray();
-
-            var index = random.Next(1, steps.Length - 1);
-
-            if (steps[index].IsRest && !steps[index - 1].IsRest)
-            {
-                steps[index] = new MotifStep(steps[index - 1].DegreeOffset, false);
-            }
-            else
-            {
-                steps[index] = steps[index] with { IsRest = true };
-            }
-
-            return new LeadMotif(steps);
-        }
-
-        private static LeadMotif ApplySimplifyVariation(LeadMotif motif)
-        {
-            var steps = motif.Steps
-                .Select((step, index) =>
-                    index % 2 == 1 && !step.IsRest
-                        ? step with { IsRest = true }
-                        : step)
-                .ToArray();
-
-            return new LeadMotif(steps);
-        }
-
-        private static LeadMotif ApplyDirectionFlip(LeadMotif motif)
-        {
-            var steps = motif.Steps
-                .Select(step =>
-                    step.IsRest
-                        ? step
-                        : step with { DegreeOffset = -step.DegreeOffset })
-                .ToArray();
-
-            return new LeadMotif(steps);
-        }
-
-        private static void AddLeadNotes(
-            List<NoteEvent> notes,
-            IReadOnlyList<int> scaleIntervals,
-            int leadRoot,
-            LeadMotif motif,
-            SectionType section,
-            double barStartBeat,
-            Random random)
-        {
-            for (var stepIndex = 0; stepIndex < motif.Steps.Count; stepIndex++)
-            {
-                var step = motif.Steps[stepIndex];
-                if (step.IsRest)
-                    continue;
-
-                if (section == SectionType.Break && stepIndex < 4)
-                    continue;
-
-                var startBeat = barStartBeat + (stepIndex * EighthNoteDuration);
-                var duration = ResolveLeadDuration(motif, stepIndex, section);
-                var velocityBase = section == SectionType.Variation
-                    ? LeadVariationVelocity
-                    : LeadBaseVelocity;
-                var velocity = velocityBase + random.NextDouble() * LeadVelocityRange;
-
-                var degree = Math.Max(0, step.DegreeOffset);
-                var octaveOffset = step.DegreeOffset < 0 ? -1 : 0;
-                var midiNote = ScaleDegreeToMidi(leadRoot, scaleIntervals, degree, octaveOffset);
+                    velocity += 0.04;
+                }
 
                 notes.Add(new NoteEvent(
-                    TrackKind.Lead,
-                    midiNote,
-                    startBeat,
-                    duration,
+                    TrackKind.Pad,
+                    note.NoteNumber,
+                    barStartBeat + (step * SixteenthBeat),
+                    ArpDuration,
                     velocity));
             }
         }
 
-        private static double ResolveLeadDuration(
-            LeadMotif motif,
-            int stepIndex,
-            SectionType section)
+        private static IReadOnlyList<MusicNote> BuildArpNotes(IReadOnlyList<MusicNote> chord)
         {
-            if (section == SectionType.Intro || section == SectionType.Outro)
-            {
-                return 0.75;
-            }
+            var root = chord[0];
+            var third = chord[1];
+            var fifth = chord[2];
 
-            var nextIndex = stepIndex + 1;
-            if (nextIndex < motif.Steps.Count && motif.Steps[nextIndex].IsRest)
-            {
-                return 0.75;
-            }
-
-            return 0.45;
+            return
+            [
+                root,
+                third,
+                fifth,
+                root + MusicInterval.Twelve
+            ];
         }
 
-        private static void AddBassNotes(
+        private static void AddBassLayer(
             List<NoteEvent> notes,
-            IReadOnlyList<int> scaleIntervals,
-            int currentRoot,
-            int nextRoot,
+            MusicTheoryContext theory,
+            int chordDegree,
+            int nextChordDegree,
+            AudioProfile profile,
             SectionType section,
+            int[] bassPattern,
             double barStartBeat,
-            Random random)
+            Random random,
+            bool isVariantBar)
         {
-            var pattern = PickBassPattern(section, random);
-
-            switch (pattern)
+            for (var step = 0; step < SixteenthStepsPerBar; step++)
             {
-                case BassPatternType.HoldRoot:
-                    notes.Add(new NoteEvent(
-                        TrackKind.Bass,
-                        currentRoot,
-                        barStartBeat,
-                        BeatsPerBar,
-                        BassHoldVelocity));
-                    break;
+                var patternValue = bassPattern[step];
+                if (patternValue < 0)
+                {
+                    continue;
+                }
 
-                case BassPatternType.PulseRoot:
-                    notes.Add(new NoteEvent(
-                        TrackKind.Bass,
-                        currentRoot,
-                        barStartBeat,
-                        HalfBarDuration,
-                        BassPulseVelocity + 0.05));
+                if (section == SectionType.Break && step is not 0 and not 4 and not 8 and not 12 and not 14)
+                {
+                    continue;
+                }
 
-                    notes.Add(new NoteEvent(
-                        TrackKind.Bass,
-                        currentRoot,
-                        barStartBeat + 2.0,
-                        HalfBarDuration,
-                        BassPulseVelocity));
-                    break;
+                var degree = step >= 14
+                    ? nextChordDegree + patternValue
+                    : chordDegree + patternValue;
 
-                case BassPatternType.ApproachNextRoot:
-                    notes.Add(new NoteEvent(
-                        TrackKind.Bass,
-                        currentRoot,
-                        barStartBeat,
-                        3.0,
-                        BassHoldVelocity));
+                degree = Math.Clamp(degree, 0, 6);
 
-                    var approachNote = BuildApproachNote(scaleIntervals, nextRoot);
-                    notes.Add(new NoteEvent(
-                        TrackKind.Bass,
-                        approachNote,
-                        barStartBeat + 3.5,
-                        0.4,
-                        BassApproachVelocity));
-                    break;
+                var note = theory.GetScaleNote(degree, profile.BassOctave);
+                var velocity = step % 4 == 0
+                    ? BassAccentVelocity
+                    : BassVelocity;
+                var duration = step % 4 == 0
+                    ? BassAccentDuration
+                    : BassDuration;
+
+                if (isVariantBar && step == 14)
+                {
+                    velocity += 0.04;
+                }
+
+                notes.Add(new NoteEvent(
+                    TrackKind.Bass,
+                    note.NoteNumber,
+                    barStartBeat + (step * SixteenthBeat),
+                    duration,
+                    velocity + (random.NextDouble() * 0.03)));
             }
         }
 
-        private static BassPatternType PickBassPattern(SectionType section, Random random)
+        private static void AddLeadLayer(
+            List<NoteEvent> notes,
+            MusicTheoryContext theory,
+            int chordDegree,
+            AudioProfile profile,
+            SectionType section,
+            int[] leadPattern,
+            double barStartBeat,
+            Random random,
+            bool isVariantBar)
         {
-            return section switch
+            var rootBias = chordDegree;
+
+            for (var step = 0; step < SixteenthStepsPerBar; step++)
             {
-                SectionType.Intro => BassPatternType.HoldRoot,
-                SectionType.Main => random.Next(100) < 65
-                    ? BassPatternType.PulseRoot
-                    : BassPatternType.HoldRoot,
-                SectionType.Variation => BassPatternType.ApproachNextRoot,
-                SectionType.Break => BassPatternType.HoldRoot,
-                SectionType.Outro => BassPatternType.HoldRoot,
-                _ => BassPatternType.PulseRoot
-            };
+                if (section == SectionType.Break && step < 8)
+                {
+                    continue;
+                }
+
+                if (step % 2 == 1 && random.Next(100) < 35 && section != SectionType.Variation)
+                {
+                    continue;
+                }
+
+                var degree = Math.Clamp(rootBias + leadPattern[step], 0, 6);
+
+                var octave = Math.Max(3, profile.LeadOctave - 1);
+                if (step >= 8 && random.Next(100) < 12)
+                {
+                    octave += 1;
+                }
+
+                var note = theory.GetScaleNote(degree, octave);
+                var velocity = step % 4 == 0
+                    ? LeadAccentVelocity
+                    : LeadVelocity;
+                var duration = step % 4 == 0
+                    ? LeadAccentDuration
+                    : LeadDuration;
+
+                if (section == SectionType.Intro)
+                {
+                    velocity *= 0.88;
+                }
+
+                if (isVariantBar && step is 12 or 15)
+                {
+                    velocity += 0.05;
+                }
+
+                notes.Add(new NoteEvent(
+                    TrackKind.Lead,
+                    note.NoteNumber,
+                    barStartBeat + (step * SixteenthBeat),
+                    duration,
+                    velocity + (random.NextDouble() * 0.04)));
+
+                if (step % 8 == 0 && section is not SectionType.Intro)
+                {
+                    notes.Add(new NoteEvent(
+                        TrackKind.Lead,
+                        note.NoteNumber + 12,
+                        barStartBeat + (step * SixteenthBeat),
+                        duration * 0.85,
+                        (velocity * 0.68) + (random.NextDouble() * 0.03)));
+                }
+            }
         }
 
-        private static int BuildApproachNote(
-            IReadOnlyList<int> scaleIntervals,
-            int nextRoot)
-        {
-            var pitchClass = nextRoot % SemitonesPerOctave;
-            var octave = (nextRoot / SemitonesPerOctave) - MidiOctaveOffset;
-
-            var scalePitchClasses = scaleIntervals
-                .Select(interval => interval % SemitonesPerOctave)
-                .OrderBy(x => x)
-                .ToArray();
-
-            var lowerScalePitchClass = scalePitchClasses
-                .LastOrDefault(pc => pc < pitchClass);
-
-            if (lowerScalePitchClass == 0 && !scalePitchClasses.Contains(0) && pitchClass != 0)
-            {
-                lowerScalePitchClass = scalePitchClasses[^1];
-                octave--;
-            }
-            else if (lowerScalePitchClass == 0 && pitchClass == 0)
-            {
-                lowerScalePitchClass = scalePitchClasses[^1];
-                octave--;
-            }
-
-            return lowerScalePitchClass + ((octave + MidiOctaveOffset) * SemitonesPerOctave);
-        }
-
-        private static void AddDrumNotes(
+        private static void AddDrumLayer(
             List<NoteEvent> notes,
             SectionType section,
-            int barIndex,
+            DrumBarPattern pattern,
             double barStartBeat,
-            Random random)
+            bool addFill)
         {
-            var pattern = PickDrumPattern(section, random);
+            AddKick(notes, pattern.KickSteps, barStartBeat, section);
+            AddSnare(notes, pattern.SnareSteps, barStartBeat, section);
+            AddHiHats(notes, pattern.HiHatSteps, barStartBeat, section);
 
-            AddKick(notes, pattern, barStartBeat);
-            AddSnare(notes, pattern, barStartBeat);
-            AddHiHats(notes, pattern, section, barStartBeat, random);
-
-            if ((barIndex + 1) % 4 == 0 && section is not SectionType.Outro)
+            if (addFill && section is not SectionType.Outro)
             {
                 AddMiniFill(notes, barStartBeat);
             }
         }
 
-        private static DrumPatternType PickDrumPattern(SectionType section, Random random)
-        {
-            return section switch
-            {
-                SectionType.Intro => DrumPatternType.Sparse,
-                SectionType.Main => random.Next(100) < 70
-                    ? DrumPatternType.Basic
-                    : DrumPatternType.Driving,
-                SectionType.Variation => DrumPatternType.Driving,
-                SectionType.Break => DrumPatternType.Sparse,
-                SectionType.Outro => DrumPatternType.Sparse,
-                _ => DrumPatternType.Basic
-            };
-        }
-
         private static void AddKick(
             List<NoteEvent> notes,
-            DrumPatternType pattern,
-            double beatOffset)
+            IReadOnlyList<int> steps,
+            double barStartBeat,
+            SectionType section)
         {
-            var beats = pattern switch
+            foreach (var step in steps)
             {
-                DrumPatternType.Basic => new[] { 0.0, 2.0 },
-                DrumPatternType.Sparse => new[] { 0.0 },
-                DrumPatternType.Driving => new[] { 0.0, 1.5, 2.0, 3.0 },
-                _ => new[] { 0.0, 2.0 }
-            };
+                if (section == SectionType.Intro && step != 0)
+                {
+                    continue;
+                }
 
-            for (var i = 0; i < beats.Length; i++)
-            {
+                var velocity = step == 0
+                    ? KickVelocity
+                    : KickSecondaryVelocity;
+
                 notes.Add(new NoteEvent(
                     TrackKind.Drums,
                     KickMidiNote,
-                    beatOffset + beats[i],
+                    barStartBeat + (step * SixteenthBeat),
                     DrumHitDuration,
-                    i == 0 ? KickPrimaryVelocity : KickSecondaryVelocity));
+                    velocity));
             }
         }
 
         private static void AddSnare(
             List<NoteEvent> notes,
-            DrumPatternType pattern,
-            double beatOffset)
+            IReadOnlyList<int> steps,
+            double barStartBeat,
+            SectionType section)
         {
-            var beats = pattern switch
+            foreach (var step in steps)
             {
-                DrumPatternType.Basic => new[] { 1.0, 3.0 },
-                DrumPatternType.Sparse => new[] { 3.0 },
-                DrumPatternType.Driving => new[] { 1.0, 3.0 },
-                _ => new[] { 1.0, 3.0 }
-            };
+                if (section == SectionType.Intro && step < 8)
+                {
+                    continue;
+                }
 
-            foreach (var beat in beats)
-            {
                 notes.Add(new NoteEvent(
                     TrackKind.Drums,
                     SnareMidiNote,
-                    beatOffset + beat,
+                    barStartBeat + (step * SixteenthBeat),
                     DrumHitDuration,
                     SnareVelocity));
             }
@@ -588,29 +505,35 @@ namespace SeedWave.Core.AudioComposition
 
         private static void AddHiHats(
             List<NoteEvent> notes,
-            DrumPatternType pattern,
-            SectionType section,
-            double beatOffset,
-            Random random)
+            IReadOnlyList<int> steps,
+            double barStartBeat,
+            SectionType section)
         {
-            for (var step = 0; step < HiHatStepsPerBar; step++)
+            foreach (var step in steps)
             {
-                if (pattern == DrumPatternType.Sparse && step % 2 == 1)
+                if (section == SectionType.Break && step % 2 == 1)
                 {
                     continue;
                 }
 
-                var startBeat = beatOffset + (step * HiHatStepSize);
-                var midiNote = section == SectionType.Variation && step == HiHatStepsPerBar - 1
+                if (section == SectionType.Intro && step % 4 == 3)
+                {
+                    continue;
+                }
+
+                var midiNote = step == 15 && section == SectionType.Variation
                     ? OpenHiHatMidiNote
                     : ClosedHiHatMidiNote;
-                var velocity = HiHatMinVelocity + random.NextDouble() * HiHatVelocityRange;
+
+                var velocity = midiNote == OpenHiHatMidiNote
+                    ? OpenHiHatVelocity
+                    : HiHatVelocity + ((step % 4 == 0) ? 0.04 : 0.0);
 
                 notes.Add(new NoteEvent(
                     TrackKind.Drums,
                     midiNote,
-                    startBeat,
-                    HiHatHitDuration,
+                    barStartBeat + (step * SixteenthBeat),
+                    HiHatDuration,
                     velocity));
             }
         }
@@ -619,48 +542,48 @@ namespace SeedWave.Core.AudioComposition
         {
             var fillStart = barStartBeat + 3.0;
 
-            notes.Add(new NoteEvent(
-                TrackKind.Drums,
-                SnareMidiNote,
-                fillStart + 0.00,
-                0.10,
-                FillSnareVelocity));
-
-            notes.Add(new NoteEvent(
-                TrackKind.Drums,
-                SnareMidiNote,
-                fillStart + 0.25,
-                0.10,
-                FillSnareVelocity + 0.04));
-
-            notes.Add(new NoteEvent(
-                TrackKind.Drums,
-                SnareMidiNote,
-                fillStart + 0.50,
-                0.10,
-                FillSnareVelocity + 0.08));
-
-            notes.Add(new NoteEvent(
-                TrackKind.Drums,
-                OpenHiHatMidiNote,
-                fillStart + 0.75,
-                0.12,
-                0.66));
+            notes.Add(new NoteEvent(TrackKind.Drums, SnareMidiNote, fillStart + 0.00, 0.08, 0.78));
+            notes.Add(new NoteEvent(TrackKind.Drums, SnareMidiNote, fillStart + 0.25, 0.08, 0.82));
+            notes.Add(new NoteEvent(TrackKind.Drums, SnareMidiNote, fillStart + 0.50, 0.08, 0.86));
+            notes.Add(new NoteEvent(TrackKind.Drums, OpenHiHatMidiNote, fillStart + 0.75, 0.10, 0.64));
         }
 
-        private static int ScaleDegreeToMidi(
-            int baseMidi,
-            IReadOnlyList<int> scaleIntervals,
-            int degree,
-            int octaveOffset)
+        private sealed record DrumBarPattern(
+            IReadOnlyList<int> KickSteps,
+            IReadOnlyList<int> SnareSteps,
+            IReadOnlyList<int> HiHatSteps)
         {
-            var scaleLength = scaleIntervals.Count;
-            var octaveShift = degree / scaleLength;
-            var scaleIndex = degree % scaleLength;
+            public static DrumBarPattern Basic()
+            {
+                return new DrumBarPattern(
+                    KickSteps: [0, 8],
+                    SnareSteps: [4, 12],
+                    HiHatSteps: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
+            }
 
-            return baseMidi
-                   + scaleIntervals[scaleIndex]
-                   + ((octaveShift + octaveOffset) * SemitonesPerOctave);
+            public static DrumBarPattern BasicVariant()
+            {
+                return new DrumBarPattern(
+                    KickSteps: [0, 6, 8],
+                    SnareSteps: [4, 12],
+                    HiHatSteps: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
+            }
+
+            public static DrumBarPattern Driving()
+            {
+                return new DrumBarPattern(
+                    KickSteps: [0, 6, 8, 12],
+                    SnareSteps: [4, 12],
+                    HiHatSteps: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
+            }
+
+            public static DrumBarPattern DrivingVariant()
+            {
+                return new DrumBarPattern(
+                    KickSteps: [0, 4, 8, 12],
+                    SnareSteps: [4, 12],
+                    HiHatSteps: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
+            }
         }
     }
 }

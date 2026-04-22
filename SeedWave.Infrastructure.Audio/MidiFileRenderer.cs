@@ -14,10 +14,14 @@ namespace SeedWave.Infrastructure.Audio
 
         private const byte LeadChannel = 0;
         private const byte BassChannel = 1;
+        private const byte PadChannel = 2;
         private const byte DrumChannel = 9;
 
-        private const byte LeadProgram = 80;
-        private const byte BassProgram = 33;
+        private const byte ControllerVolume = 7;
+        private const byte ControllerPan = 10;
+        private const byte ControllerExpression = 11;
+        private const byte ControllerReverb = 91;
+        private const byte ControllerChorus = 93;
 
         public GeneratedMidi Render(CompositionPlan plan, string fileName)
         {
@@ -32,48 +36,68 @@ namespace SeedWave.Infrastructure.Audio
 
         private static MidiFile BuildMidiFile(CompositionPlan plan)
         {
-            var midiFile = CreateMidiFile(plan);
-            var tempoMap = BuildTempoMap(plan);
-
-            midiFile.ReplaceTempoMap(tempoMap);
-
-            return midiFile;
-        }
-
-        private static MidiFile CreateMidiFile(CompositionPlan plan)
-        {
-            return new MidiFile(
+            var midiFile = new MidiFile(
                 BuildLeadTrack(plan),
                 BuildBassTrack(plan),
+                BuildArpTrack(plan),
                 BuildDrumTrack(plan))
             {
                 TimeDivision = new TicksPerQuarterNoteTimeDivision(TicksPerBeat)
             };
-        }
 
-        private static TempoMap BuildTempoMap(CompositionPlan plan)
-        {
-            return TempoMap.Create(Tempo.FromBeatsPerMinute(plan.TempoBpm));
+            midiFile.ReplaceTempoMap(TempoMap.Create(Tempo.FromBeatsPerMinute(plan.TempoBpm)));
+            return midiFile;
         }
 
         private static TrackChunk BuildLeadTrack(CompositionPlan plan)
         {
+            var preset = PickLeadPreset(plan);
+
             return BuildInstrumentTrack(
                 plan,
                 TrackKind.Lead,
                 "Lead",
                 LeadChannel,
-                LeadProgram);
+                preset.Program,
+                preset.Volume,
+                preset.Pan,
+                preset.Expression,
+                preset.Reverb,
+                preset.Chorus);
         }
 
         private static TrackChunk BuildBassTrack(CompositionPlan plan)
         {
+            var preset = PickBassPreset(plan);
+
             return BuildInstrumentTrack(
                 plan,
                 TrackKind.Bass,
                 "Bass",
                 BassChannel,
-                BassProgram);
+                preset.Program,
+                preset.Volume,
+                preset.Pan,
+                preset.Expression,
+                preset.Reverb,
+                preset.Chorus);
+        }
+
+        private static TrackChunk BuildArpTrack(CompositionPlan plan)
+        {
+            var preset = PickArpPreset(plan);
+
+            return BuildInstrumentTrack(
+                plan,
+                TrackKind.Pad,
+                "Arp",
+                PadChannel,
+                preset.Program,
+                preset.Volume,
+                preset.Pan,
+                preset.Expression,
+                preset.Reverb,
+                preset.Chorus);
         }
 
         private static TrackChunk BuildDrumTrack(CompositionPlan plan)
@@ -81,6 +105,9 @@ namespace SeedWave.Infrastructure.Audio
             var chunk = new TrackChunk();
 
             AddTrackName(chunk, "Drums");
+            AddController(chunk, DrumChannel, ControllerVolume, 112);
+            AddController(chunk, DrumChannel, ControllerPan, 64);
+            AddController(chunk, DrumChannel, ControllerReverb, 10);
             AddNotes(chunk, GetNotes(plan, TrackKind.Drums), DrumChannel);
 
             return chunk;
@@ -91,15 +118,91 @@ namespace SeedWave.Infrastructure.Audio
             TrackKind trackKind,
             string name,
             byte channel,
-            byte program)
+            byte program,
+            byte volume,
+            byte pan,
+            byte expression,
+            byte reverb,
+            byte chorus)
         {
             var chunk = new TrackChunk();
 
             AddTrackName(chunk, name);
             AddProgramChange(chunk, channel, program);
+            AddController(chunk, channel, ControllerVolume, volume);
+            AddController(chunk, channel, ControllerPan, pan);
+            AddController(chunk, channel, ControllerExpression, expression);
+            AddController(chunk, channel, ControllerReverb, reverb);
+            AddController(chunk, channel, ControllerChorus, chorus);
             AddNotes(chunk, GetNotes(plan, trackKind), channel);
 
             return chunk;
+        }
+
+        private static InstrumentPreset PickLeadPreset(CompositionPlan plan)
+        {
+            if (plan.TempoBpm >= 100)
+            {
+                return new InstrumentPreset(
+                    Program: 80,   // Square lead
+                    Volume: 112,
+                    Pan: 68,
+                    Expression: 120,
+                    Reverb: 14,
+                    Chorus: 6);
+            }
+
+            return new InstrumentPreset(
+                Program: 81,   // Saw lead
+                Volume: 108,
+                Pan: 68,
+                Expression: 116,
+                Reverb: 18,
+                Chorus: 8);
+        }
+
+        private static InstrumentPreset PickBassPreset(CompositionPlan plan)
+        {
+            if (plan.TempoBpm >= 100)
+            {
+                return new InstrumentPreset(
+                    Program: 38,   // Synth bass
+                    Volume: 110,
+                    Pan: 64,
+                    Expression: 116,
+                    Reverb: 4,
+                    Chorus: 2);
+            }
+
+            return new InstrumentPreset(
+                Program: 39,   // Synth bass 2
+                Volume: 108,
+                Pan: 64,
+                Expression: 114,
+                Reverb: 6,
+                Chorus: 2);
+        }
+
+        private static InstrumentPreset PickArpPreset(CompositionPlan plan)
+        {
+            if (plan.TempoBpm >= 100)
+            {
+                return new InstrumentPreset(
+                    Program: 62,   // Synth Brass 1
+                    Volume: 90,
+                    Pan: 60,
+                    Expression: 102,
+                    Reverb: 10,
+                    Chorus: 4);
+            }
+
+            return new InstrumentPreset(
+                Program: 87,   // Bass + Lead
+                Volume: 88,
+                Pan: 60,
+                Expression: 100,
+                Reverb: 12,
+                Chorus: 6);
         }
 
         private static IEnumerable<CoreNote> GetNotes(
@@ -108,7 +211,8 @@ namespace SeedWave.Infrastructure.Audio
         {
             return plan.Notes
                 .Where(note => note.Track == trackKind)
-                .OrderBy(note => note.StartBeat);
+                .OrderBy(note => note.StartBeat)
+                .ThenBy(note => note.MidiNote);
         }
 
         private static void AddTrackName(TrackChunk chunk, string name)
@@ -128,18 +232,27 @@ namespace SeedWave.Infrastructure.Audio
             using var manager = chunk.ManageTimedEvents();
 
             manager.Objects.Add(new TimedEvent(
-                CreateProgramChange(channel, program),
+                new ProgramChangeEvent((SevenBitNumber)program)
+                {
+                    Channel = (FourBitNumber)channel
+                },
                 0));
         }
 
-        private static ProgramChangeEvent CreateProgramChange(
+        private static void AddController(
+            TrackChunk chunk,
             byte channel,
-            byte program)
+            byte controller,
+            byte value)
         {
-            return new ProgramChangeEvent((SevenBitNumber)program)
-            {
-                Channel = (FourBitNumber)channel
-            };
+            using var manager = chunk.ManageTimedEvents();
+
+            manager.Objects.Add(new TimedEvent(
+                new ControlChangeEvent((SevenBitNumber)controller, (SevenBitNumber)value)
+                {
+                    Channel = (FourBitNumber)channel
+                },
+                0));
         }
 
         private static void AddNotes(
@@ -160,7 +273,7 @@ namespace SeedWave.Infrastructure.Audio
             return new MidiNote((SevenBitNumber)note.MidiNote)
             {
                 Time = ToTicks(note.StartBeat),
-                Length = ToTicks(note.DurationBeats),
+                Length = Math.Max(ToTicks(note.DurationBeats), 1),
                 Velocity = (SevenBitNumber)ToVelocity(note.Velocity),
                 Channel = (FourBitNumber)channel
             };
@@ -180,9 +293,7 @@ namespace SeedWave.Infrastructure.Audio
         private static byte[] WriteMidiFile(MidiFile midiFile)
         {
             using var stream = new MemoryStream();
-
             midiFile.Write(stream);
-
             return stream.ToArray();
         }
 
@@ -191,5 +302,13 @@ namespace SeedWave.Infrastructure.Audio
             var stem = Path.GetFileNameWithoutExtension(fileName);
             return $"{stem}.mid";
         }
+
+        private sealed record InstrumentPreset(
+            byte Program,
+            byte Volume,
+            byte Pan,
+            byte Expression,
+            byte Reverb,
+            byte Chorus);
     }
 }

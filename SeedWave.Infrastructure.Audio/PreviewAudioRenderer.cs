@@ -6,118 +6,191 @@ using MeltyMidiFile = MeltySynth.MidiFile;
 
 namespace SeedWave.Infrastructure.Audio
 {
-    public sealed class PreviewAudioRenderer : IAudioRenderer
+    public sealed class PreviewAudioRenderer(
+        IMidiRenderer midiRenderer,
+        WavEncoder wavEncoder,
+        AudioSettings settings) : IAudioRenderer
     {
-        private const int SampleRate = 44_100;
         private const int ChannelCount = 2;
         private const int BeatsPerBar = 4;
-        private const int TailSeconds = 2;
-
-        private readonly IMidiRenderer _midiRenderer;
-        private readonly WavEncoder _wavEncoder;
-        private readonly string _soundFontPath;
-
-        public PreviewAudioRenderer(
-            IMidiRenderer midiRenderer,
-            WavEncoder wavEncoder,
-            AudioSettings settings)
-        {
-            _midiRenderer = midiRenderer;
-            _wavEncoder = wavEncoder;
-            _soundFontPath = settings.SoundFontPath;
-        }
 
         public GeneratedAudio Render(CompositionPlan plan, string fileName)
         {
             ArgumentNullException.ThrowIfNull(plan);
 
             var midiBytes = RenderMidi(plan);
-            var samples = RenderSamples(plan, midiBytes);
-            var wav = _wavEncoder.Encode(samples, SampleRate);
+            var stereoSamples = RenderStereoSamples(plan, midiBytes);
+
+            PostProcess(
+                stereoSamples,
+                settings.SampleRate,
+                ChannelCount,
+                settings.TargetPeak,
+                settings.SoftClipDrive);
+
+            var wav = wavEncoder.EncodeInterleaved(
+                stereoSamples,
+                settings.SampleRate,
+                ChannelCount);
 
             return new GeneratedAudio(wav, "audio/wav", fileName);
         }
 
         private GeneratedMidi RenderMidi(CompositionPlan plan)
         {
-            return _midiRenderer.Render(plan, "preview.mid");
+            return midiRenderer.Render(plan, "preview.mid");
         }
 
-        private float[] RenderSamples(CompositionPlan plan, GeneratedMidi midi)
+        private float[] RenderStereoSamples(CompositionPlan plan, GeneratedMidi midi)
         {
-            using var soundFontStream = OpenSoundFont();
-            using var midiStream = OpenMidi(midi);
+            using var soundFontStream = File.OpenRead(settings.SoundFontPath);
+            using var midiStream = new MemoryStream(midi.Content, writable: false);
 
-            var synthesizer = CreateSynth(soundFontStream);
-            var midiFile = ReadMidiFile(midiStream);
-            var sequencer = CreateSequencer(synthesizer);
+            var soundFont = new SoundFont(soundFontStream);
+            var synthSettings = CreateSynthSettings(settings.SampleRate);
+            var synthesizer = new Synthesizer(soundFont, synthSettings);
+            var midiFile = new MeltyMidiFile(midiStream);
+            var sequencer = new MidiFileSequencer(synthesizer);
 
             sequencer.Play(midiFile, false);
 
-            var stereo = CreateStereoBuffer(plan);
+            var stereo = new float[EstimateSampleCount(plan) * ChannelCount];
             sequencer.RenderInterleaved(stereo);
 
-            return MixToMono(stereo);
+            return stereo;
         }
 
-        private FileStream OpenSoundFont()
+        private SynthesizerSettings CreateSynthSettings(int sampleRate)
         {
-            return File.OpenRead(_soundFontPath);
+            return new SynthesizerSettings(sampleRate)
+            {
+                EnableReverbAndChorus = true
+            };
         }
 
-        private static MemoryStream OpenMidi(GeneratedMidi midi)
-        {
-            return new MemoryStream(midi.Content, writable: false);
-        }
-
-        private static Synthesizer CreateSynth(Stream soundFontStream)
-        {
-            var soundFont = new SoundFont(soundFontStream);
-            var settings = new SynthesizerSettings(SampleRate);
-
-            return new Synthesizer(soundFont, settings);
-        }
-
-        private static MeltyMidiFile ReadMidiFile(Stream midiStream)
-        {
-            return new MeltyMidiFile(midiStream);
-        }
-
-        private static MidiFileSequencer CreateSequencer(Synthesizer synthesizer)
-        {
-            return new MidiFileSequencer(synthesizer);
-        }
-
-        private static float[] CreateStereoBuffer(CompositionPlan plan)
-        {
-            var sampleCount = EstimateSampleCount(plan);
-            return new float[sampleCount * ChannelCount];
-        }
-
-        private static int EstimateSampleCount(CompositionPlan plan)
-        {
-            var seconds = EstimateDurationSeconds(plan);
-            return (int)Math.Ceiling(seconds * SampleRate);
-        }
-
-        private static double EstimateDurationSeconds(CompositionPlan plan)
+        private int EstimateSampleCount(CompositionPlan plan)
         {
             var beats = plan.Bars * BeatsPerBar;
             var songSeconds = beats * 60.0 / plan.TempoBpm;
+            var totalSeconds = songSeconds + settings.TailSeconds;
 
-            return songSeconds + TailSeconds;
+            return (int)Math.Ceiling(totalSeconds * settings.SampleRate);
         }
 
-        private static float[] MixToMono(float[] stereo)
+        private static void PostProcess(
+            float[] interleaved,
+            int sampleRate,
+            int channelCount,
+            float targetPeak,
+            float softClipDrive)
         {
-            var mono = new float[stereo.Length / ChannelCount];
-
-            for (var i = 0; i < mono.Length; i++)
+            if (interleaved.Length == 0)
             {
-                mono[i] = (stereo[i * 2] + stereo[(i * 2) + 1]) * 0.5f;
+                return;
             }
 
-            return mono;
+            ApplyFadeIn(interleaved, sampleRate, channelCount, 0.012);
+            ApplyFadeOut(interleaved, sampleRate, channelCount, 1.20);
+            ApplyStereoWidthTrim(interleaved, 0.94f);
+            NormalizeToPeak(interleaved, targetPeak);
+            ApplySoftClip(interleaved, softClipDrive);
+        }
+
+        private static void ApplyFadeIn(
+            float[] interleaved,
+            int sampleRate,
+            int channelCount,
+            double seconds)
+        {
+            var frames = Math.Min(
+                interleaved.Length / channelCount,
+                (int)(sampleRate * seconds));
+
+            for (var frame = 0; frame < frames; frame++)
+            {
+                var gain = (float)frame / Math.Max(frames, 1);
+
+                for (var channel = 0; channel < channelCount; channel++)
+                {
+                    var index = (frame * channelCount) + channel;
+                    interleaved[index] *= gain;
+                }
+            }
+        }
+
+        private static void ApplyFadeOut(
+            float[] interleaved,
+            int sampleRate,
+            int channelCount,
+            double seconds)
+        {
+            var totalFrames = interleaved.Length / channelCount;
+            var fadeFrames = Math.Min(totalFrames, (int)(sampleRate * seconds));
+            var fadeStart = totalFrames - fadeFrames;
+
+            for (var frame = fadeStart; frame < totalFrames; frame++)
+            {
+                var t = (float)(frame - fadeStart) / Math.Max(fadeFrames, 1);
+                var gain = 1.0f - t;
+
+                for (var channel = 0; channel < channelCount; channel++)
+                {
+                    var index = (frame * channelCount) + channel;
+                    interleaved[index] *= gain;
+                }
+            }
+        }
+
+        private static void ApplyStereoWidthTrim(float[] interleaved, float sideScale)
+        {
+            for (var i = 0; i < interleaved.Length - 1; i += 2)
+            {
+                var left = interleaved[i];
+                var right = interleaved[i + 1];
+
+                var mid = (left + right) * 0.5f;
+                var side = (left - right) * 0.5f * sideScale;
+
+                interleaved[i] = mid + side;
+                interleaved[i + 1] = mid - side;
+            }
+        }
+
+        private static void NormalizeToPeak(float[] samples, float targetPeak)
+        {
+            var peak = 0f;
+
+            for (var i = 0; i < samples.Length; i++)
+            {
+                var value = Math.Abs(samples[i]);
+                if (value > peak)
+                {
+                    peak = value;
+                }
+            }
+
+            if (peak < 0.0001f)
+            {
+                return;
+            }
+
+            var gain = targetPeak / peak;
+
+            for (var i = 0; i < samples.Length; i++)
+            {
+                samples[i] *= gain;
+            }
+        }
+
+        private static void ApplySoftClip(float[] samples, float drive)
+        {
+            var normalizer = MathF.Tanh(drive);
+
+            for (var i = 0; i < samples.Length; i++)
+            {
+                var x = samples[i] * drive;
+                samples[i] = MathF.Tanh(x) / normalizer;
+            }
         }
     }
 }
