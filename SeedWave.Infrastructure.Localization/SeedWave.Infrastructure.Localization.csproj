@@ -7,17 +7,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Folder Include="CoverArt\" />
-    <Folder Include="Caching\" />
-    <Folder Include="Covers\" />
-    <Folder Include="IO\" />
-    <Folder Include="DependencyInjection\" />
-    <Folder Include="Localization\" />
-  </ItemGroup>
-
- 
-
-  <ItemGroup>
     <ProjectReference Include="..\SeedWave.Core\SeedWave.Core.csproj" />
   </ItemGroup>
 

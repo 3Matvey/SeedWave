@@ -21,7 +21,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\SeedWave.Core\SeedWave.Core.csproj" />
-    <ProjectReference Include="..\SeedWave.Infrastructure\SeedWave.Infrastructure.csproj" />
+    <ProjectReference Include="..\SeedWave.Infrastructure.Audio\SeedWave.Infrastructure.Audio.csproj" />
+    <ProjectReference Include="..\SeedWave.Infrastructure.Covers\SeedWave.Infrastructure.Covers.csproj" />
+    <ProjectReference Include="..\SeedWave.Infrastructure.Localization\SeedWave.Infrastructure.Localization.csproj" />
   </ItemGroup>
 
 </Project>

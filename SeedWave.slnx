@@ -1,5 +1,7 @@
 <Solution>
   <Project Path="SeedWave.Api/SeedWave.Api.csproj" />
   <Project Path="SeedWave.Core/SeedWave.Core.csproj" />
-  <Project Path="SeedWave.Infrastructure/SeedWave.Infrastructure.csproj" />
+  <Project Path="SeedWave.Infrastructure.Audio/SeedWave.Infrastructure.Audio.csproj" Id="eec69e93-1da6-4e8a-af12-309fb2e726d7" />
+  <Project Path="SeedWave.Infrastructure.Covers/SeedWave.Infrastructure.Covers.csproj" Id="80376a66-554c-4934-8b87-b44b8ac2837b" />
+  <Project Path="SeedWave.Infrastructure.Localization/SeedWave.Infrastructure.Localization.csproj" Id="a2a33b65-4352-4c0c-88fc-17ee47893073" />
 </Solution>
