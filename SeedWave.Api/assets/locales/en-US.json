@@ -22,5 +22,31 @@
     "Lo-Fi Pop",
     "Ambient Pop",
     "Alternative Rock"
-  ]
+  ],
+  "reviews": {
+    "openings": [
+      "This composition sounds focused and cohesive",
+      "The track sets a clear mood from the very beginning",
+      "This piece immediately stands out because of its atmosphere",
+      "The song makes a strong first impression right away"
+    ],
+    "moodDescriptors": [
+      "with a slight sense of nostalgia",
+      "with a cold neon energy",
+      "with a soft dreamlike melancholy",
+      "with a dark but appealing tone"
+    ],
+    "arrangementDescriptors": [
+      "the arrangement feels clean and modern",
+      "the musical structure unfolds in a gradual and logical way",
+      "the balance between rhythm and melody works naturally",
+      "the overall sound feels dense and well defined"
+    ],
+    "closings": [
+      "As a result, the track leaves a memorable impression",
+      "It feels like a well-assembled and convincing piece",
+      "In this form, the composition sounds complete",
+      "The track holds attention confidently until the end"
+    ]
+  }
 }

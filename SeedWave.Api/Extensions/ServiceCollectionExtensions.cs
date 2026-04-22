@@ -3,6 +3,7 @@ using SeedWave.Core.Catalog;
 using SeedWave.Core.Generation;
 using SeedWave.Core.Regions;
 using SeedWave.Infrastructure.Audio;
+using SeedWave.Infrastructure.Covers;
 using SeedWave.Infrastructure.Localization;
 
 namespace SeedWave.Api.Extensions
@@ -15,7 +16,8 @@ namespace SeedWave.Api.Extensions
             {
                 var localesPath = Path.Combine(environment.ContentRootPath, "assets", "locales");
 
-                services.AddSingleton<ILocaleProfileProvider>(_ => new JsonLocaleProfileProvider(localesPath));
+                services.AddSingleton<ILocaleProfileProvider>(_ =>
+                    new JsonLocaleProfileProvider(localesPath));
 
                 services.AddSingleton<ISeedDeriver, SeedDeriver>();
                 services.AddSingleton<ReviewTextGenerator>();
@@ -26,9 +28,24 @@ namespace SeedWave.Api.Extensions
                 services.AddSingleton<LikesGenerator>();
 
                 services.AddSingleton<AudioProfileGenerator>();
+                services.AddSingleton<CoverProfileBuilder>();
                 services.AddSingleton<CompositionPlanBuilder>();
+
                 services.AddSingleton<WavEncoder>();
-                services.AddSingleton<PreviewAudioRenderer>();
+                var soundFontPath = Path.Combine(
+                    environment.ContentRootPath,
+                    "assets",
+                    "soundfonts",
+                    "default.sf2");
+
+                services.AddSingleton(new AudioSettings
+                            {
+                    SoundFontPath = soundFontPath
+                });
+
+                services.AddSingleton<IAudioRenderer, PreviewAudioRenderer>();
+                services.AddSingleton<IMidiRenderer, MidiFileRenderer>();
+                services.AddSingleton<ICoverRenderer, CoverSvgRenderer>();
 
                 services.AddSingleton<SongGenerationService>();
                 services.AddSingleton<CatalogGenerationService>();

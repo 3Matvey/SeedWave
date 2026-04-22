@@ -8,6 +8,7 @@
         Genre = 4,
         Likes = 5,
         Review = 6,
-        Audio = 7
+        Audio = 7,
+        Cover = 8
     }
 }

@@ -25,5 +25,6 @@ app.MapGetCatalogEndpoint();
 app.MapGetRegionsEndpoint();
 app.MapGetSongDetailsEndpoint();
 app.MapGetSongPreviewEndpoint();
+app.MapGetSongCoverEndpoint();
 
 app.Run();

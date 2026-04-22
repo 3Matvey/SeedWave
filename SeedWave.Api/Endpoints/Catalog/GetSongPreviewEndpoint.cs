@@ -25,7 +25,7 @@ namespace SeedWave.Api.Endpoints.Catalog
             ISeedDeriver seedDeriver,
             AudioProfileGenerator audioProfileGenerator,
             CompositionPlanBuilder compositionPlanBuilder,
-            PreviewAudioRenderer previewAudioRenderer
+            IAudioRenderer previewAudioRenderer
         )
         {
             if (sequenceIndex <= 0)
